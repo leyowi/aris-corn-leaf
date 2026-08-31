@@ -1,0 +1,30 @@
+# venv
+venv/
+venv-pi5/
+env/
+
+# python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# secrets
+.env
+
+# per-stage weights
+models/**/*.pt
+models/**/*.onnx
+
+# large processed crops 
+data/processed/**/*.jpg
+data/processed/**/*.png
+data/raw/*
+!data/raw/.gitkeep
+
+# OS/editor junk
+.DS_Store
+.vscode/
+
+# other
+others/
+setup_structure.py

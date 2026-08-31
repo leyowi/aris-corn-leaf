@@ -1,0 +1,32 @@
+# ARIS - dev machine requirements
+
+# YOLOv8 detect + seg
+ultralytics
+torch
+torchvision
+
+# dataset pulling from Roboflow
+roboflow
+
+# data handling & analysis
+pandas
+numpy
+matplotlib
+seaborn
+
+# model export
+onnx
+onnxruntime
+
+# notebooks
+jupyter
+ipykernel
+
+# config & utilities
+pyyaml
+python-dotenv
+tqdm
+
+# code quality
+black
+flake8
