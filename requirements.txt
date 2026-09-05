@@ -1,6 +1,12 @@
 # ARIS - dev machine requirements
+#
+# NOTE: torch/torchvision below install CPU-only via plain `pip install -r requirements.txt`.
+# For CUDA-accelerated training (NVIDIA GPU), install torch/torchvision separately FIRST with:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+# then run `pip install -r requirements.txt` — pip will see torch/torchvision already
+# satisfied and skip reinstalling the CPU build.
 
-# YOLOv8 detect + seg
+# YOLOv8 detection + segmentation
 ultralytics
 torch
 torchvision
