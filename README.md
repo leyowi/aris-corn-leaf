@@ -20,3 +20,23 @@ geo-tags detections via GPS, and reports them through a web dashboard.
 
 See `requirements.txt` (dev machine) and `requirements-pi5.txt`
 (Raspberry Pi 5 onboard inference).
+
+## **How It Works**
+
+Corn Field  
+   ↓  
+Autonomous Rover  
+   ↓  
+Camera Image Capture  
+   ↓  
+AI Disease Detection  
+   ↓  
+GPS Geo-tagging  
+   ↓  
+Database  
+   ↓  
+Web Dashboard  
+   ↓  
+Farmer / LGU Monitoring
+
+The rover captures images while navigating the field. The AI model identifies the condition of corn leaves, while GPS records the location of each detection. The collected information is then stored and presented through a web dashboard.
