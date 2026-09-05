@@ -1,6 +1,6 @@
 # ARIS
 
-**ARIS** - Design and Development of a Computer Vision-Based Monitoring System
+**ARIS** (Autonomous Agriculture Rover for Inference and Surveillance) - Design and Development of a Computer Vision-Based Monitoring System
 for Zeamays (Corn) Leaf Disease Detection.
 
 An AI-assisted autonomous agricultural rover that detects corn leaf diseases
