@@ -15,11 +15,29 @@ __pycache__/
 models/**/*.pt
 models/**/*.onnx
 
-# large processed crops 
-data/processed/**/*.jpg
-data/processed/**/*.png
+# datasets downloaded from Roboflow — fully regenerable via src/data/download_dataset.py
+data/processed/leaf_detect/*
+data/processed/leaf_segment/*
+data/processed/disease_classify/*
+data/processed/baseline_seg/*
+!data/processed/**/.gitkeep
+
 data/raw/*
 !data/raw/.gitkeep
+
+# trained weights 
+models/**/*.pt
+models/**/*.onnx
+!models/**/.gitkeep
+
+# stray files Ultralytics drops at the project root during training/validation
+/yolov8n-seg.pt
+/yolo*n.pt
+/weights/
+/runs/
+
+# generated caches
+*.cache
 
 # OS/editor junk
 .DS_Store
