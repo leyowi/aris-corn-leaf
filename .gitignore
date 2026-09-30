@@ -36,6 +36,9 @@ models/**/*.onnx
 /weights/
 /runs/
 
+# disposable prediction outputs (overwritten every predict.py run)
+results/predictions/
+
 # generated caches
 *.cache
 
