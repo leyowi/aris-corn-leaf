@@ -1,10 +1,10 @@
 # ARIS - Leaf Segmentation (Stage 2) - Test Set Evaluation
 
-**Model:** YOLOv8n-seg
-**Run:** v1-6
-**Weights:** models\leaf_segment\v1-6\weights\best.pt
-**Evaluated:** 2026-09-30 20:08
-**Test set:** 37 images, 56 `corn-leaf` instances
+**Model:** YOLOv8n-seg  \
+**Run:** v1-6  \
+**Weights:** models\leaf_segment\v1-6\weights\best.pt  \
+**Evaluated:** 2026-09-30 20:08  \
+**Test set:** 37 images, 56 `corn-leaf` instances  
 
 ## Detection (Bounding Box) Metrics
 
