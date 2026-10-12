@@ -9,8 +9,8 @@ from src.utils.config import DATA_PROCESSED_DIR
 from src.data.download_dataset import download_roboflow_dataset
 
 PROJECT_NAME = "aris-disease-classify"
-VERSION = 1
-DEST = DATA_PROCESSED_DIR / "disease_classify" / "labeled"
+VERSION = 2 
+DEST = DATA_PROCESSED_DIR / "disease_classify" / f"labeled_v{VERSION}"
 
 
 def original_name(stem):
@@ -23,6 +23,7 @@ def main():
 
     counts = defaultdict(lambda: defaultdict(int))
     seen = defaultdict(list)  # original crop name -> [(split, class), ...]
+    kaggle = defaultdict(lambda: defaultdict(int))
 
     for split in ("train", "valid", "test"):
         split_dir = root / split
@@ -31,6 +32,8 @@ def main():
         for class_dir in sorted(p for p in split_dir.iterdir() if p.is_dir()):
             for img in class_dir.glob("*.jpg"):
                 counts[class_dir.name][split] += 1
+                if img.name.startswith("kaggle_"):
+                    kaggle[class_dir.name][split] += 1
                 seen[original_name(img.stem)].append((split, class_dir.name))
 
     print(f"\n{'Class':<28}{'Train':>8}{'Valid':>8}{'Test':>8}{'Total':>8}")
@@ -44,6 +47,16 @@ def main():
         print(f"{cls:<28}{row['train']:>8}{row['valid']:>8}{row['test']:>8}{t:>8}")
     print("-" * 60)
     print(f"{'TOTAL':<28}{totals['train']:>8}{totals['valid']:>8}{totals['test']:>8}{sum(totals.values()):>8}")
+
+    print(f"\nKaggle crops included above:")
+    print(f"{'Class':<28}{'Train':>8}{'Valid':>8}{'Test':>8}")
+    for cls in sorted(counts):
+        k = kaggle[cls]
+        print(f"{cls:<28}{k['train']:>8}{k['valid']:>8}{k['test']:>8}")
+    if any(kaggle[c]["test"] for c in kaggle):
+        print("\n!!! WARNING: Kaggle crops found in TEST. Test must be field only. !!!")
+    else:
+        print("\nTest set is 100% field crops. OK.")
 
     dupes = {k: v for k, v in seen.items() if len(v) > 1}
     cross_split = {k: v for k, v in dupes.items() if len({s for s, _ in v}) > 1}
