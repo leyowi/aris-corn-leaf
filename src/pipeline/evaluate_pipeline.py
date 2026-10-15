@@ -27,13 +27,13 @@ OP_CONF = 0.25          # operating threshold for P / R / F1 and speed
 IOU_THRESHOLDS = np.arange(0.5, 0.96, 0.05)
 
 
-def load_ground_truth():
+def load_ground_truth(split_dir=TEST_DIR):
     images = []
-    for img_path in sorted((TEST_DIR / "images").glob("*.jpg")):
+    for img_path in sorted((split_dir / "images").glob("*.jpg")):
         img = cv2.imread(str(img_path))
         h, w = img.shape[:2]
         gts = []
-        lbl = TEST_DIR / "labels" / f"{img_path.stem}.txt"
+        lbl = split_dir / "labels" / f"{img_path.stem}.txt"
         if lbl.exists():
             for line in lbl.read_text().split("\n"):
                 parts = line.split()

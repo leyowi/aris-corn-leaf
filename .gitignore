@@ -49,3 +49,6 @@ results/predictions/
 # other
 others/
 setup_structure.py
+
+results/error_analysis/*
+!results/error_analysis/summary.md
