@@ -26,33 +26,34 @@ def main():
 
     groups = defaultdict(list)
     for r in rows:
-        groups[(r["arch"], r["data"])].append(r)
+        groups[(r["arch"], r["data"], r.get("input") or "square")].append(r)
 
     f1_cols = [c for c in rows[0] if c.startswith("f1_")]
     lines = [
         "# ARIS - Disease Classification (Stage 3) - Comparison",
         "",
         "Field-only test set (55 crops). Values are mean ± standard deviation across seeds.",
+        "Input: square = pad to 224 x 224, wide = rotate leaf horizontal and fit to 128 x 512.",
         "v1 = field only, v2 = field + Kaggle (train/valid only).",
         "",
         "## Overall",
         "",
-        "| Model | Data | Seeds | Val macro F1 | Test accuracy | Test macro F1 | Params (M) | GPU ms |",
-        "|---|---|---|---|---|---|---|---|",
+        "| Model | Data | Input | Seeds | Val macro F1 | Test accuracy | Test macro F1 | Params (M) | GPU ms |",
+        "|---|---|---|---|---|---|---|---|---|",
     ]
-    for (arch, data), rs in sorted(groups.items()):
+    for (arch, data, inp), rs in sorted(groups.items()):
         g = lambda k: [float(r[k]) for r in rs]  # noqa: E731
         lines.append(
-            f"| {arch} | {data} | {len(rs)} | {fmt(g('val_macro_f1'))} | {fmt(g('test_acc'))} | "
+            f"| {arch} | {data} | {inp} | {len(rs)} | {fmt(g('val_macro_f1'))} | {fmt(g('test_acc'))} | "
             f"{fmt(g('test_macro_f1'))} | {rs[0]['params_m']} | {fmt(g('gpu_ms'))} |"
         )
 
     lines += ["", "## Per class test F1", "",
-              "| Model | Data | " + " | ".join(c[3:] for c in f1_cols) + " |",
-              "|---|---|" + "---|" * len(f1_cols)]
-    for (arch, data), rs in sorted(groups.items()):
+              "| Model | Data | Input | " + " | ".join(c[3:] for c in f1_cols) + " |",
+              "|---|---|---|" + "---|" * len(f1_cols)]
+    for (arch, data, inp), rs in sorted(groups.items()):
         cells = [fmt([float(r[c]) for r in rs]) for c in f1_cols]
-        lines.append(f"| {arch} | {data} | " + " | ".join(cells) + " |")
+        lines.append(f"| {arch} | {data} | {inp} | " + " | ".join(cells) + " |")
 
     report = "\n".join(lines) + "\n"
     print(report)

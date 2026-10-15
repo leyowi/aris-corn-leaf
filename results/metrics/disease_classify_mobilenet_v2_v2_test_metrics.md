@@ -3,8 +3,9 @@
 **Model:** mobilenet_v2
 **Training data:** v2 (field + Kaggle (train/valid only))
 **Seed:** 42
+**Input:** square (224 x 224)
 **Best epoch:** 24 (val macro F1 0.8785)
-**Evaluated:** 2026-10-15 12:17
+**Evaluated:** 2026-10-15 13:18
 **Test set:** 55 leaf crops, 100% field images
 
 ## Overall
@@ -30,7 +31,7 @@
 | Item | Value |
 |---|---|
 | Parameters | 2.23 M |
-| Inference (dev GPU, batch 1) | 6.49 ms/image |
+| Inference (dev GPU, batch 1) | 6.21 ms/image |
 
 Note: classes with small support (e.g. northern-corn-leaf-blight) have high
 variance per-class metrics; interpret them with caution.

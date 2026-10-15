@@ -21,10 +21,11 @@ def main():
     parser.add_argument("--arch", choices=["mobilenet_v2", "resnet50"], required=True)
     parser.add_argument("--data", choices=["v1", "v2"], required=True)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--input", choices=["square", "wide"], default="square")
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    run = run_name(args.arch, args.data, args.seed)
+    run = run_name(args.arch, args.data, args.seed, args.input)
     ckpt = torch.load(MODELS_DIR / "disease_classify" / run / "best.pt", map_location=device)
     classes = ckpt["classes"]
 
@@ -32,7 +33,7 @@ def main():
     model.load_state_dict(ckpt["state_dict"])
     model.to(device).eval()
 
-    test_ds = datasets.ImageFolder(get_data_root(args.data) / "test", get_transforms(train=False))
+    test_ds = datasets.ImageFolder(get_data_root(args.data) / "test", get_transforms(train=False, input_mode=ckpt.get("input_mode", "square")))
     assert test_ds.classes == classes, "Test class folders differ from training"
     loader = DataLoader(test_ds, batch_size=32, shuffle=False, num_workers=0)
 
@@ -71,6 +72,7 @@ def main():
 **Model:** {args.arch}
 **Training data:** {args.data} ({data_desc})
 **Seed:** {args.seed}
+**Input:** {args.input} ({"224 x 224" if args.input == "square" else "128 x 512"})
 **Best epoch:** {ckpt['epoch']} (val macro F1 {ckpt['val_macro_f1']:.4f})
 **Evaluated:** {datetime.now().strftime("%Y-%m-%d %H:%M")}
 **Test set:** {len(labels)} leaf crops, 100% field images
@@ -113,7 +115,7 @@ variance per-class metrics; interpret them with caution.
     ax.set_yticks(range(len(classes)), classes)
     ax.set_xlabel("Predicted")
     ax.set_ylabel("True")
-    ax.set_title(f"{args.arch} ({args.data}) - field test set")
+    ax.set_title(f"{args.arch} ({args.data}, {args.input}) - field test set")
     for i in range(len(classes)):
         for j in range(len(classes)):
             ax.text(j, i, cm[i, j], ha="center", va="center",
@@ -126,17 +128,21 @@ variance per-class metrics; interpret them with caution.
     # One row per run, used by summarize_runs.py (re-running replaces the old row)
     import csv
     runs_csv = out_dir / "disease_classify_runs.csv"
-    header = ["arch", "data", "seed", "best_epoch", "val_macro_f1", "test_acc",
+    header = ["arch", "data", "seed", "input", "best_epoch", "val_macro_f1", "test_acc",
               "test_macro_precision", "test_macro_recall", "test_macro_f1"] + \
              [f"f1_{c}" for c in classes] + ["params_m", "gpu_ms"]
-    row = [args.arch, args.data, args.seed, ckpt["epoch"], round(ckpt["val_macro_f1"], 4),
+    row = [args.arch, args.data, args.seed, args.input, ckpt["epoch"], round(ckpt["val_macro_f1"], 4),
            round(acc, 4), round(mp, 4), round(mr, 4), round(mf1, 4)] + \
           [round(v, 4) for v in f1] + [round(params, 2), round(ms, 2)]
     rows = []
     if runs_csv.exists():
         with open(runs_csv, newline="") as fh:
-            rows = [r for r in csv.reader(fh)][1:]
-        rows = [r for r in rows if r[:3] != [args.arch, args.data, str(args.seed)]]
+            old = list(csv.reader(fh))
+        rows = old[1:]
+        if "input" not in old[0]:  # older file without the input column
+            rows = [r[:3] + ["square"] + r[3:] for r in rows]
+        key = [args.arch, args.data, str(args.seed), args.input]
+        rows = [r for r in rows if r[:4] != key]
     rows.append([str(v) for v in row])
     with open(runs_csv, "w", newline="") as fh:
         w = csv.writer(fh)

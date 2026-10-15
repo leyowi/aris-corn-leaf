@@ -11,6 +11,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torchvision.transforms.functional as TF
+from PIL import Image
 from sklearn.metrics import f1_score
 from torch.utils.data import DataLoader
 from torchvision import datasets, models, transforms
@@ -23,7 +24,8 @@ from src.data.download_dataset import download_roboflow_dataset  # noqa: E402
 
 ROBOFLOW_PROJECT = "aris-disease-classify"
 DATASET_VERSIONS = {"v1": 1, "v2": 2}   # v1 = field only, v2 = field + Kaggle
-IMG_SIZE = 224
+IMG_SIZE = 224                 # "square" input: 224 x 224
+WIDE_SIZE = (128, 512)         # "wide" input: height x width
 MEAN = [0.485, 0.456, 0.406]
 STD = [0.229, 0.224, 0.225]
 
@@ -38,13 +40,44 @@ class PadToSquare:
         return TF.pad(img, [left, top, s - w - left, s - h - top], fill=0)
 
 
-def get_transforms(train):
-    steps = [PadToSquare(), transforms.Resize((IMG_SIZE, IMG_SIZE))]
+class ToLandscape:
+    """Rotates a tall leaf crop 90 degrees so the leaf lies horizontally."""
+
+    def __call__(self, img):
+        w, h = img.size
+        return img.rotate(90, expand=True) if h > w else img
+
+
+class ResizePad:
+    """Resizes to fit inside (height, width) keeping shape, then pads with black."""
+
+    def __init__(self, size):
+        self.h, self.w = size
+
+    def __call__(self, img):
+        w0, h0 = img.size
+        scale = min(self.w / w0, self.h / h0)
+        nw, nh = max(1, round(w0 * scale)), max(1, round(h0 * scale))
+        img = img.resize((nw, nh), Image.BILINEAR)
+        left, top = (self.w - nw) // 2, (self.h - nh) // 2
+        return TF.pad(img, [left, top, self.w - nw - left, self.h - nh - top], fill=0)
+
+
+def get_transforms(train, input_mode="square"):
+    if input_mode == "square":
+        steps = [PadToSquare(), transforms.Resize((IMG_SIZE, IMG_SIZE))]
+        rotation = 15
+    elif input_mode == "wide":
+        steps = [ToLandscape(), ResizePad(WIDE_SIZE)]
+        rotation = 5   # small, so a wide leaf does not get cut off at the edges
+    else:
+        raise ValueError(f"Unknown input mode: {input_mode}")
+
     if train:
         steps += [
             transforms.RandomHorizontalFlip(),
             transforms.RandomVerticalFlip(),
-            transforms.RandomRotation(15, fill=0),
+            transforms.RandomRotation(rotation, fill=0),
             transforms.ColorJitter(0.2, 0.2, 0.2, 0.02),
         ]
     steps += [transforms.ToTensor(), transforms.Normalize(MEAN, STD)]
@@ -58,9 +91,14 @@ def get_data_root(data_tag):
     return root
 
 
-def run_name(arch, data_tag, seed):
-    """Folder name for a run. Seed 42 keeps the original names (no suffix)."""
-    return f"{arch}_{data_tag}" + ("" if seed == 42 else f"_s{seed}")
+def run_name(arch, data_tag, seed, input_mode="square"):
+    """Folder name for a run. Square input and seed 42 keep the original names."""
+    name = f"{arch}_{data_tag}"
+    if input_mode != "square":
+        name += f"_{input_mode}"
+    if seed != 42:
+        name += f"_s{seed}"
+    return name
 
 
 def build_model(arch, num_classes, pretrained=True):
@@ -117,18 +155,19 @@ def field_only_f1(dataset, preds, labels):
     return f1_score([labels[i] for i in keep], [preds[i] for i in keep], average="macro")
 
 
-def train(arch, data_tag, epochs=60, batch=32, lr=3e-4, patience=12, seed=42):
+def train(arch, data_tag, epochs=60, batch=32, lr=3e-4, patience=12, seed=42, input_mode="square"):
     set_seed(seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     root = get_data_root(data_tag)
 
-    train_ds = datasets.ImageFolder(root / "train", get_transforms(train=True))
-    valid_ds = datasets.ImageFolder(root / "valid", get_transforms(train=False))
+    train_ds = datasets.ImageFolder(root / "train", get_transforms(train=True, input_mode=input_mode))
+    valid_ds = datasets.ImageFolder(root / "valid", get_transforms(train=False, input_mode=input_mode))
     assert train_ds.classes == valid_ds.classes, "Class folders differ between splits"
     classes = train_ds.classes
 
     counts = np.bincount(train_ds.targets, minlength=len(classes))
     weights = torch.tensor(len(train_ds) / (len(classes) * counts), dtype=torch.float32)
+    print(f"Input mode: {input_mode}")
     print(f"Classes: {classes}")
     print(f"Train counts: {counts.tolist()} -> class weights: {[round(w, 2) for w in weights.tolist()]}")
 
@@ -142,7 +181,7 @@ def train(arch, data_tag, epochs=60, batch=32, lr=3e-4, patience=12, seed=42):
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
     scaler = torch.amp.GradScaler("cuda", enabled=device.type == "cuda")
 
-    out_dir = MODELS_DIR / "disease_classify" / run_name(arch, data_tag, seed)
+    out_dir = MODELS_DIR / "disease_classify" / run_name(arch, data_tag, seed, input_mode)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     best_f1, best_epoch, history = -1.0, 0, []
@@ -157,7 +196,7 @@ def train(arch, data_tag, epochs=60, batch=32, lr=3e-4, patience=12, seed=42):
         if va_f1 > best_f1:
             best_f1, best_epoch, flag = va_f1, epoch, "  <- best"
             torch.save(
-                {"arch": arch, "classes": classes, "img_size": IMG_SIZE, "data_tag": data_tag, "seed": seed,
+                {"arch": arch, "classes": classes, "input_mode": input_mode, "data_tag": data_tag, "seed": seed,
                  "epoch": epoch, "val_macro_f1": va_f1, "state_dict": model.state_dict()},
                 out_dir / "best.pt",
             )
