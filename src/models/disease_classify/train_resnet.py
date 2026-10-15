@@ -9,8 +9,9 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--data", choices=["v1", "v2"], required=True)
+    parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
-    train("resnet50", args.data)
+    train("resnet50", args.data, seed=args.seed)
 
 
 if __name__ == "__main__":

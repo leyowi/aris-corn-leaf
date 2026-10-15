@@ -15,15 +15,16 @@ def main():
     from torch.utils.data import DataLoader
     from torchvision import datasets
 
-    from common import PROJECT_ROOT, MODELS_DIR, build_model, get_data_root, get_transforms
+    from common import PROJECT_ROOT, MODELS_DIR, build_model, get_data_root, get_transforms, run_name
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--arch", choices=["mobilenet_v2", "resnet50"], required=True)
     parser.add_argument("--data", choices=["v1", "v2"], required=True)
+    parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    run = f"{args.arch}_{args.data}"
+    run = run_name(args.arch, args.data, args.seed)
     ckpt = torch.load(MODELS_DIR / "disease_classify" / run / "best.pt", map_location=device)
     classes = ckpt["classes"]
 
@@ -69,6 +70,7 @@ def main():
 
 **Model:** {args.arch}
 **Training data:** {args.data} ({data_desc})
+**Seed:** {args.seed}
 **Best epoch:** {ckpt['epoch']} (val macro F1 {ckpt['val_macro_f1']:.4f})
 **Evaluated:** {datetime.now().strftime("%Y-%m-%d %H:%M")}
 **Test set:** {len(labels)} leaf crops, 100% field images
@@ -120,6 +122,26 @@ variance per-class metrics; interpret them with caution.
     fig.savefig(out_dir / f"disease_classify_{run}_confusion_matrix.png", dpi=150)
     plt.close(fig)
     print(f"Saved report and confusion matrix to {out_dir.relative_to(PROJECT_ROOT)}")
+
+    # One row per run, used by summarize_runs.py (re-running replaces the old row)
+    import csv
+    runs_csv = out_dir / "disease_classify_runs.csv"
+    header = ["arch", "data", "seed", "best_epoch", "val_macro_f1", "test_acc",
+              "test_macro_precision", "test_macro_recall", "test_macro_f1"] + \
+             [f"f1_{c}" for c in classes] + ["params_m", "gpu_ms"]
+    row = [args.arch, args.data, args.seed, ckpt["epoch"], round(ckpt["val_macro_f1"], 4),
+           round(acc, 4), round(mp, 4), round(mr, 4), round(mf1, 4)] + \
+          [round(v, 4) for v in f1] + [round(params, 2), round(ms, 2)]
+    rows = []
+    if runs_csv.exists():
+        with open(runs_csv, newline="") as fh:
+            rows = [r for r in csv.reader(fh)][1:]
+        rows = [r for r in rows if r[:3] != [args.arch, args.data, str(args.seed)]]
+    rows.append([str(v) for v in row])
+    with open(runs_csv, "w", newline="") as fh:
+        w = csv.writer(fh)
+        w.writerow(header)
+        w.writerows(rows)
 
 
 if __name__ == "__main__":

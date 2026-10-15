@@ -18,8 +18,8 @@ from torchvision import datasets, models, transforms
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.utils.config import DATA_PROCESSED_DIR, MODELS_DIR  
-from src.data.download_dataset import download_roboflow_dataset 
+from src.utils.config import DATA_PROCESSED_DIR, MODELS_DIR  # noqa: E402
+from src.data.download_dataset import download_roboflow_dataset  # noqa: E402
 
 ROBOFLOW_PROJECT = "aris-disease-classify"
 DATASET_VERSIONS = {"v1": 1, "v2": 2}   # v1 = field only, v2 = field + Kaggle
@@ -56,6 +56,11 @@ def get_data_root(data_tag):
     if not (root / "train").exists():
         download_roboflow_dataset(ROBOFLOW_PROJECT, DATASET_VERSIONS[data_tag], "folder", root)
     return root
+
+
+def run_name(arch, data_tag, seed):
+    """Folder name for a run. Seed 42 keeps the original names (no suffix)."""
+    return f"{arch}_{data_tag}" + ("" if seed == 42 else f"_s{seed}")
 
 
 def build_model(arch, num_classes, pretrained=True):
@@ -137,7 +142,7 @@ def train(arch, data_tag, epochs=60, batch=32, lr=3e-4, patience=12, seed=42):
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
     scaler = torch.amp.GradScaler("cuda", enabled=device.type == "cuda")
 
-    out_dir = MODELS_DIR / "disease_classify" / f"{arch}_{data_tag}"
+    out_dir = MODELS_DIR / "disease_classify" / run_name(arch, data_tag, seed)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     best_f1, best_epoch, history = -1.0, 0, []
@@ -152,7 +157,7 @@ def train(arch, data_tag, epochs=60, batch=32, lr=3e-4, patience=12, seed=42):
         if va_f1 > best_f1:
             best_f1, best_epoch, flag = va_f1, epoch, "  <- best"
             torch.save(
-                {"arch": arch, "classes": classes, "img_size": IMG_SIZE, "data_tag": data_tag,
+                {"arch": arch, "classes": classes, "img_size": IMG_SIZE, "data_tag": data_tag, "seed": seed,
                  "epoch": epoch, "val_macro_f1": va_f1, "state_dict": model.state_dict()},
                 out_dir / "best.pt",
             )

@@ -2,8 +2,9 @@
 
 **Model:** resnet50
 **Training data:** v2 (field + Kaggle (train/valid only))
+**Seed:** 42
 **Best epoch:** 9 (val macro F1 0.8753)
-**Evaluated:** 2026-10-15 11:58
+**Evaluated:** 2026-10-15 12:30
 **Test set:** 55 leaf crops, 100% field images
 
 ## Overall
@@ -29,7 +30,7 @@
 | Item | Value |
 |---|---|
 | Parameters | 23.52 M |
-| Inference (dev GPU, batch 1) | 7.73 ms/image |
+| Inference (dev GPU, batch 1) | 7.62 ms/image |
 
 Note: classes with small support (e.g. northern-corn-leaf-blight) have high
 variance per-class metrics; interpret them with caution.
