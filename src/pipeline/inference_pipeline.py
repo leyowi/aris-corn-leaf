@@ -17,19 +17,21 @@ from src.models.disease_classify.common import build_model, get_transforms  # no
 
 DETECT_WEIGHTS = MODELS_DIR / "leaf_detect" / "v1" / "weights" / "best.pt"
 SEGMENT_WEIGHTS = MODELS_DIR / "leaf_segment" / "v1-6" / "weights" / "best.pt"
-CLASSIFIER_PATTERN = "mobilenet_v2_v1_wide*"   # final Stage 3 setup (3 seeds)
+CLASSIFIER_PATTERNS = ["mobilenet_v2_v1_wide", "mobilenet_v2_v1_wide_s*"]
 CROP_PAD = 10                                  # same padding as the training crops
 
 
 def pick_best_classifier():
     """Chooses the Stage 3 seed with the highest VALIDATION macro F1 (never test)."""
     best = None
-    for ckpt_path in sorted((MODELS_DIR / "disease_classify").glob(f"{CLASSIFIER_PATTERN}/best.pt")):
+    paths = sorted({p for pat in CLASSIFIER_PATTERNS
+                    for p in (MODELS_DIR / "disease_classify").glob(f"{pat}/best.pt")})
+    for ckpt_path in paths:
         ckpt = torch.load(ckpt_path, map_location="cpu")
         if best is None or ckpt["val_macro_f1"] > best[1]:
             best = (ckpt_path, ckpt["val_macro_f1"])
     if best is None:
-        raise FileNotFoundError(f"No classifier found matching {CLASSIFIER_PATTERN}")
+        raise FileNotFoundError(f"No classifier found matching {CLASSIFIER_PATTERNS}")
     return best
 
 
