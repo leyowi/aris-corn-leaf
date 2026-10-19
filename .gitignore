@@ -33,6 +33,7 @@ models/**/*.onnx
 # stray files Ultralytics drops at the project root during training/validation
 /yolov8n-seg.pt
 /yolo*n.pt
+/yolov8s-seg.pt
 /weights/
 /runs/
 

@@ -1,61 +1,59 @@
+import argparse
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
+
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 
+def f1(p, r):
+    return 2 * p * r / (p + r) if (p + r) else 0.0
+
+
 def main():
-    from src.utils.config import DATA_PROCESSED_DIR, MODELS_DIR, PROJECT_ROOT as ROOT
+    from src.utils.config import DATA_PROCESSED_DIR, MODELS_DIR
     from ultralytics import YOLO
 
-    # Update these to whichever run/weights you're evaluating
-    RUN_NAME = "v1-6"
-    WEIGHTS_PATH = MODELS_DIR / "leaf_segment" / RUN_NAME / "weights" / "best.pt"
-    DATA_YAML = DATA_PROCESSED_DIR / "leaf_segment" / "data.yaml"
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--run", default="v1-6")
+    ap.add_argument("--split", choices=["valid", "test"], default="valid")
+    args = ap.parse_args()
 
-    model = YOLO(str(WEIGHTS_PATH))
-    metrics = model.val(data=str(DATA_YAML), split="test", plots=False)
+    weights = MODELS_DIR / "leaf_segment" / args.run / "weights" / "best.pt"
+    data_yaml = DATA_PROCESSED_DIR / "leaf_segment" / "data.yaml"
+    split = "val" if args.split == "valid" else "test"
 
-    r = metrics.results_dict
-    n_images = metrics.nt_per_image.sum() if hasattr(metrics, "nt_per_image") else "N/A"
-    n_instances = int(metrics.nt_per_class.sum())
+    m = YOLO(str(weights)).val(data=str(data_yaml), split=split, plots=False,
+                               project=str(MODELS_DIR / "leaf_segment"),
+                               name=f"{args.run}_{args.split}", exist_ok=True)
 
-    report = f"""# ARIS - Leaf Segmentation (Stage 2) - Test Set Evaluation
+    def row(label, res):
+        return (f"| {label} | {res.mp:.4f} | {res.mr:.4f} | {f1(res.mp, res.mr):.4f} | "
+                f"{res.map50:.4f} | {res.map:.4f} |")
 
-**Model:** YOLOv8n-seg
-**Run:** {RUN_NAME}
-**Weights:** {WEIGHTS_PATH.relative_to(ROOT)}
+    params = sum(p.numel() for p in YOLO(str(weights)).model.parameters()) / 1e6
+    report = f"""# ARIS - Leaf Segmentation (Stage 2) - {args.split.upper()} evaluation
+
+**Run:** {args.run}  ({params:.2f} M parameters)
+**Split:** {args.split}
 **Evaluated:** {datetime.now().strftime("%Y-%m-%d %H:%M")}
-**Test set:** {n_images} images, {n_instances} `corn-leaf` instances
+**Leaves:** {int(m.nt_per_class.sum())}
 
-## Detection (Bounding Box) Metrics
+| Head | Precision | Recall | F1 | mAP@50 | mAP@50-95 |
+|---|---|---|---|---|---|
+{row("Box", m.box)}
+{row("Mask", m.seg)}
 
-| Metric | Value |
-|---|---|
-| Precision | {r['metrics/precision(B)']:.4f} |
-| Recall | {r['metrics/recall(B)']:.4f} |
-| mAP@50 | {r['metrics/mAP50(B)']:.4f} |
-| mAP@50-95 | {r['metrics/mAP50-95(B)']:.4f} |
-
-## Segmentation (Mask) Metrics
-
-| Metric | Value |
-|---|---|
-| Precision | {r['metrics/precision(M)']:.4f} |
-| Recall | {r['metrics/recall(M)']:.4f} |
-| mAP@50 | {r['metrics/mAP50(M)']:.4f} |
-| mAP@50-95 | {r['metrics/mAP50-95(M)']:.4f} |
+Speed (dev GPU): inference {m.speed['inference']:.2f} ms/image
 """
-
     print(report)
-
-    out_dir = ROOT / "results" / "metrics"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f"leaf_segment_{RUN_NAME}_test_metrics.md"
-    out_path.write_text(report)
-    print(f"Saved to: {out_path.relative_to(ROOT)}")
+    out = PROJECT_ROOT / "results" / "metrics" / f"leaf_segment_{args.run}_{args.split}_metrics.md"
+    out.write_text(report, encoding="utf-8")
+    print(f"Saved to: {out.relative_to(PROJECT_ROOT)}")
 
 
 if __name__ == "__main__":

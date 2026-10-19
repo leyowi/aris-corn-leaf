@@ -20,11 +20,14 @@ from src.utils.config import DATA_PROCESSED_DIR, MODELS_DIR  # noqa: E402
 from src.pipeline.inference_pipeline import ARISPipeline, pick_best_classifier  # noqa: E402
 
 TEST_DIR = DATA_PROCESSED_DIR / "baseline_seg" / "test"
+VAL_DIR = DATA_PROCESSED_DIR / "baseline_seg" / "valid"
 BASELINE_WEIGHTS = MODELS_DIR / "baseline_seg" / "v1" / "weights" / "best.pt"
 CLASSES = ["corn-rust", "gray-leaf-spot", "healthy", "northern-corn-leaf-blight"]
 EVAL_CONF = 0.001       # low threshold for mAP (standard practice)
 OP_CONF = 0.25          # operating threshold for P / R / F1 and speed
 IOU_THRESHOLDS = np.arange(0.5, 0.96, 0.05)
+TARGET_ACC = 0.85       # accuracy wanted on the leaves ARIS is confident about
+PROB_GRID = [0.0, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95]
 
 
 def load_ground_truth(split_dir=TEST_DIR):
@@ -62,7 +65,7 @@ def predict_pipeline(pipe, images, conf):
     for item in images:
         h, w = item["img"].shape[:2]
         leaves = pipe.predict(item["img"], seg_conf=conf, max_det=100)
-        out.append([{"cls": CLASSES.index(l["class_name"]), "conf": l["conf"],
+        out.append([{"cls": CLASSES.index(l["class_name"]), "conf": l["conf"], "prob": l["cls_prob"],
                      "mask": to_mask(l["polygon"], h, w)} for l in leaves])
     return out
 
@@ -76,7 +79,8 @@ def predict_baseline(model, images, conf):
         if r.masks is not None:
             for poly, c, k in zip(r.masks.xy, r.boxes.conf.tolist(), r.boxes.cls.tolist()):
                 if len(poly) >= 3:
-                    preds.append({"cls": int(k), "conf": float(c), "mask": to_mask(poly, h, w)})
+                    preds.append({"cls": int(k), "conf": float(c), "prob": float(c),
+                                  "mask": to_mask(poly, h, w)})
         out.append(preds)
     return out
 
@@ -141,6 +145,7 @@ def score(images, preds):
         f1 = 2 * p * r / (p + r) if (p + r) else 0.0
         rows[name] = {"P": p, "R": r, "F1": f1, "AP50": ap50, "AP5095": ap5095, "n": n_gt}
 
+    # Leaf-level view at the operating threshold
     found = correct = total = 0
     for item, ps, iou in zip(images, preds, ious):
         for k, g in enumerate(item["gts"]):
@@ -153,6 +158,46 @@ def score(images, preds):
     leaf = {"found": found / total, "acc_found": correct / found if found else 0.0,
             "found_correct": correct / total, "total": total}
     return rows, leaf
+
+
+def found_leaves(images, preds):
+    """For every real leaf that was found (IoU >= 0.5, conf >= OP_CONF):
+    (true class, predicted class, disease confidence). Also returns total leaves."""
+    ious = iou_tables(images, preds)
+    found, total = [], 0
+    for item, ps, iou in zip(images, preds, ious):
+        for k, g in enumerate(item["gts"]):
+            total += 1
+            cands = [(p["conf"], p["cls"], p["prob"]) for j, p in enumerate(ps)
+                     if p["conf"] >= OP_CONF and iou[j, k] >= 0.5]
+            if cands:
+                _, cls, prob = max(cands)
+                found.append((g["cls"], cls, prob))
+    return found, total
+
+
+def binary_view(found, total):
+    """Healthy vs diseased: a leaf counts as correct if both say 'diseased' (any disease)."""
+    healthy = CLASSES.index("healthy")
+    correct = sum((t == healthy) == (p == healthy) for t, p, _ in found)
+    return {"acc_found": correct / len(found) if found else 0.0, "found_correct": correct / total}
+
+
+def confidence_table(found):
+    """For each threshold: share of found leaves kept (coverage) and accuracy on them."""
+    rows = []
+    for t in PROB_GRID:
+        kept = [(a, b) for a, b, p in found if p >= t]
+        acc = sum(a == b for a, b in kept) / len(kept) if kept else float("nan")
+        rows.append({"t": t, "coverage": len(kept) / len(found) if found else 0.0, "acc": acc,
+                     "kept": len(kept), "flagged": len(found) - len(kept)})
+    return rows
+
+
+def choose_threshold(val_rows):
+    """Lowest threshold reaching TARGET_ACC on VALIDATION (never chosen on test)."""
+    ok = [r for r in val_rows if r["kept"] > 0 and r["acc"] >= TARGET_ACC]
+    return ok[0]["t"] if ok else None
 
 
 def mean_of(rows, key):
@@ -185,6 +230,17 @@ def main():
     print("Running baseline...")
     base_rows, base_leaf = score(images, predict_baseline(baseline, images, EVAL_CONF))
 
+    print("Confidence threshold: choosing on validation...")
+    val_images = load_ground_truth(VAL_DIR)
+    extras = {}
+    for name, fn in [("3-stage pipeline", lambda ims: predict_pipeline(pipe, ims, EVAL_CONF)),
+                     ("Single-stage baseline", lambda ims: predict_baseline(baseline, ims, EVAL_CONF))]:
+        v_found, _ = found_leaves(val_images, fn(val_images))
+        t_found, t_total = found_leaves(images, fn(images))
+        v_rows, t_rows = confidence_table(v_found), confidence_table(t_found)
+        thr = choose_threshold(v_rows)
+        extras[name] = {"binary": binary_view(t_found, t_total), "val": v_rows, "test": t_rows, "thr": thr}
+
     print("Timing...")
     pipe_ms = time_per_image(lambda im: pipe.predict(im, seg_conf=OP_CONF), images)
     base_ms = time_per_image(lambda im: baseline.predict(im, conf=OP_CONF, verbose=False), images)
@@ -199,6 +255,27 @@ def main():
                          f"{r['AP50']:.4f} | {r['AP5095']:.4f} |" for n, r in rows.items())
 
     head_c = "| Class | Leaves | Precision | Recall | F1 | mAP@50 | mAP@50-95 |\n|---|---|---|---|---|---|---|"
+
+    binary_rows = "\n".join(f"| {n} | {e['binary']['acc_found']:.4f} | {e['binary']['found_correct']:.4f} |"
+                             for n, e in extras.items())
+
+    def at(rows, t):
+        return next(r for r in rows if r["t"] == t)
+
+    chosen = []
+    for n, e in extras.items():
+        if e["thr"] is None:
+            chosen.append(f"| {n} | none reaches {TARGET_ACC:.0%} on validation | - | - | - |")
+        else:
+            v, t = at(e["val"], e["thr"]), at(e["test"], e["thr"])
+            chosen.append(f"| {n} | {e['thr']:.2f} | {v['coverage']:.0%} / {v['acc']:.0%} | "
+                          f"{t['coverage']:.0%} / {t['acc']:.0%} | {t['flagged']} |")
+    chosen_rows = "\n".join(chosen)
+    grid_head = " | ".join(f">= {t:.2f}" for t in PROB_GRID)
+    grid_sep = "---|" * len(PROB_GRID)
+    grid_rows = "\n".join(
+        f"| {n} | " + " | ".join(f"{r['coverage']:.0%} kept, {r['acc']:.0%}" if r["kept"] else "none kept" for r in e["test"]) + " |"
+        for n, e in extras.items())
     report = f"""# ARIS - 3-stage pipeline vs single-stage baseline (end to end)
 
 **Evaluated:** {datetime.now().strftime("%Y-%m-%d %H:%M")}
@@ -223,6 +300,29 @@ def main():
 
 {head_c}
 {per_class(base_rows)}
+
+## Healthy vs diseased (test)
+
+The farmer's first question is "is this leaf sick?". Here any disease counts as "diseased".
+
+| System | Correct (of found) | Found AND correct |
+|---|---|---|
+{binary_rows}
+
+## Confidence filter: "uncertain, check manually" (test)
+
+Leaves below the threshold are flagged for a person to check instead of being labeled.
+The threshold is chosen on the VALIDATION set as the lowest one reaching {TARGET_ACC:.0%} accuracy.
+
+| System | Threshold (from validation) | Val: kept / accuracy | Test: kept / accuracy | Test leaves flagged |
+|---|---|---|---|---|
+{chosen_rows}
+
+Full trade-off on test (kept = share of found leaves ARIS labels itself):
+
+| System | {grid_head} |
+|---|{grid_sep}
+{grid_rows}
 
 Notes: precision/recall/F1/mAP are means over the 4 classes. "Leaves found" = a
 prediction overlaps the leaf with mask IoU >= 0.5. Speed is measured on the dev GPU

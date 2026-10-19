@@ -25,7 +25,11 @@ from src.data.download_dataset import download_roboflow_dataset  # noqa: E402
 ROBOFLOW_PROJECT = "aris-disease-classify"
 DATASET_VERSIONS = {"v1": 1, "v2": 2}   # v1 = field only, v2 = field + Kaggle
 IMG_SIZE = 224                 # "square" input: 224 x 224
-WIDE_SIZE = (128, 512)         # "wide" input: height x width
+WIDE_SIZES = {                 # height x width
+    "wide": (128, 512),        # chosen in the first round
+    "wide_hr": (192, 768),     # higher resolution: lesions about 1.5x bigger
+}
+INPUT_MODES = ["square"] + list(WIDE_SIZES)
 MEAN = [0.485, 0.456, 0.406]
 STD = [0.229, 0.224, 0.225]
 
@@ -67,8 +71,8 @@ def get_transforms(train, input_mode="square"):
     if input_mode == "square":
         steps = [PadToSquare(), transforms.Resize((IMG_SIZE, IMG_SIZE))]
         rotation = 15
-    elif input_mode == "wide":
-        steps = [ToLandscape(), ResizePad(WIDE_SIZE)]
+    elif input_mode in WIDE_SIZES:
+        steps = [ToLandscape(), ResizePad(WIDE_SIZES[input_mode])]
         rotation = 5   # small, so a wide leaf does not get cut off at the edges
     else:
         raise ValueError(f"Unknown input mode: {input_mode}")
@@ -171,6 +175,8 @@ def train(arch, data_tag, epochs=60, batch=32, lr=3e-4, patience=12, seed=42, in
     print(f"Classes: {classes}")
     print(f"Train counts: {counts.tolist()} -> class weights: {[round(w, 2) for w in weights.tolist()]}")
 
+    # num_workers=0: no helper processes. On Windows each helper loads its own copy
+    # of torch/sklearn/scipy and runs out of RAM. The dataset is small, so this is fine.
     loader_kw = dict(batch_size=batch, num_workers=0, pin_memory=True)
     train_dl = DataLoader(train_ds, shuffle=True, **loader_kw)
     valid_dl = DataLoader(valid_ds, shuffle=False, **loader_kw)

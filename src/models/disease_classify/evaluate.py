@@ -21,7 +21,7 @@ def main():
     parser.add_argument("--arch", choices=["mobilenet_v2", "resnet50"], required=True)
     parser.add_argument("--data", choices=["v1", "v2"], required=True)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--input", choices=["square", "wide"], default="square")
+    parser.add_argument("--input", choices=["square", "wide", "wide_hr"], default="square")
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -72,7 +72,7 @@ def main():
 **Model:** {args.arch}
 **Training data:** {args.data} ({data_desc})
 **Seed:** {args.seed}
-**Input:** {args.input} ({"224 x 224" if args.input == "square" else "128 x 512"})
+**Input:** {args.input} ({ {"square": "224 x 224", "wide": "128 x 512", "wide_hr": "192 x 768"}[args.input] })
 **Best epoch:** {ckpt['epoch']} (val macro F1 {ckpt['val_macro_f1']:.4f})
 **Evaluated:** {datetime.now().strftime("%Y-%m-%d %H:%M")}
 **Test set:** {len(labels)} leaf crops, 100% field images

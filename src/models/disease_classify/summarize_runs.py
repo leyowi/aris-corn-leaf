@@ -33,7 +33,7 @@ def main():
         "# ARIS - Disease Classification (Stage 3) - Comparison",
         "",
         "Field-only test set (55 crops). Values are mean ± standard deviation across seeds.",
-        "Input: square = pad to 224 x 224, wide = rotate leaf horizontal and fit to 128 x 512.",
+        "Input: square = pad to 224 x 224; wide = leaf horizontal, fit to 128 x 512; wide_hr = 192 x 768.",
         "v1 = field only, v2 = field + Kaggle (train/valid only).",
         "",
         "## Overall",
