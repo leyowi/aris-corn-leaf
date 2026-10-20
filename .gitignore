@@ -11,45 +11,28 @@ __pycache__/
 # secrets
 .env
 
-# per-stage weights
-models/**/*.pt
-models/**/*.onnx
+# datasets
+data/
 
-# datasets downloaded from Roboflow — fully regenerable via src/data/download_dataset.py
-data/processed/leaf_detect/*
-data/processed/leaf_segment/*
-data/processed/disease_classify/*
-data/processed/baseline_seg/*
-!data/processed/**/.gitkeep
-
-data/raw/*
-!data/raw/.gitkeep
-
-# trained weights 
-models/**/*.pt
-models/**/*.onnx
+# model files
+*.pt
+*.onnx
 !models/**/.gitkeep
 
-# stray files Ultralytics drops at the project root during training/validation
-/yolov8n-seg.pt
-/yolo*n.pt
-/yolov8s-seg.pt
+# stray files Ultralytics drops at the project root
 /weights/
 /runs/
 
-# disposable prediction outputs (overwritten every predict.py run)
+# generated outputs
 results/predictions/
-
-# generated caches
+results/error_analysis/*
+!results/error_analysis/summary.md
 *.cache
 
 # OS/editor junk
 .DS_Store
 .vscode/
 
-# other
-others/
+# personal / planning files
+docs/
 setup_structure.py
-
-results/error_analysis/*
-!results/error_analysis/summary.md
