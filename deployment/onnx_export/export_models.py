@@ -56,6 +56,7 @@ def export_yolo(weights, name, out_models):
     result = {"source": str(weights.relative_to(PROJECT_ROOT))}
     onnx_path = Path(YOLO(str(weights)).export(format="onnx", imgsz=IMGSZ, simplify=True))
     shutil.copy2(onnx_path, out_models / f"{name}.onnx")
+    onnx_path.unlink()                     # keep models/ clean: the copy lives in the bundle
     result["onnx"] = f"models/{name}.onnx"
     print(f"[ok] {name}.onnx")
 
@@ -63,7 +64,8 @@ def export_yolo(weights, name, out_models):
         ncnn_dir = Path(YOLO(str(weights)).export(format="ncnn", imgsz=IMGSZ))
         dest = out_models / f"{name}_ncnn_model"
         shutil.rmtree(dest, ignore_errors=True)
-        shutil.copytree(ncnn_dir, dest)
+        shutil.copytree(ncnn_dir, dest, ignore=shutil.ignore_patterns("__pycache__"))
+        shutil.rmtree(ncnn_dir)            # keep models/ clean
         result["ncnn"] = f"models/{name}_ncnn_model"
         print(f"[ok] {name}_ncnn_model")
     except Exception as e:  # NCNN is optional; ONNX is enough to run
