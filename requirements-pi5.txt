@@ -1,0 +1,11 @@
+# ARIS - Raspberry Pi 5 requirements (64-bit Raspberry Pi OS, Python 3.11)
+# Install inside the Pi virtual environment:  pip install -r requirements-pi5.txt
+#
+# ultralytics runs the YOLO models (ONNX or NCNN) with the same pre/post-processing
+# as on the dev PC. It pulls in CPU PyTorch automatically.
+ultralytics==8.4.166
+onnxruntime          # Stage 3 classifier
+ncnn                 # optional faster YOLO format on ARM
+opencv-python-headless
+numpy
+pillow
